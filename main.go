@@ -14,6 +14,7 @@ func main() {
 		Usage: "A CLI music player powered by DAB API",
 		Commands: []*cli.Command {
 			cmd.LoginCommand(),
+			cmd.SearchCommand(),
 		},
 	}
 
