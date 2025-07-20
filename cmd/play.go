@@ -4,13 +4,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"io"
 	"os"
 	"os/exec"
 
 	"github.com/urfave/cli/v2"
-	
+
 	"github.com/adityadeshmukh1/dab-cli/internal/models"
 )
+
+
+func mapQualityToFFmpegFlags(q string) (codec, format, bitrate string) {
+	switch q {
+	case "low":
+		return "libmp3lame", "mp3", "96k"
+	case "medium":
+		return "libmp3lame", "mp3", "160k"
+	case "high":
+		return "libmp3lame", "mp3", "256k"
+	case "flac":
+		return "flac", "flac", ""
+	default:
+		return "libmp3lame", "mp3", "192k"
+	}
+}
+
 
 func PlayCommand() *cli.Command {
 	return &cli.Command {
@@ -18,9 +36,16 @@ func PlayCommand() *cli.Command {
 		Usage: "Play a track by ID",
 		Flags: []cli.Flag {
 			&cli.IntFlag {Name: "id", Aliases:[]string{"i"}, Required: true},
+			&cli.StringFlag{
+				Name:    "quality",
+				Aliases: []string{"q"},
+				Usage:   "Audio quality: low, medium, high",
+				Value:   "high", // default
+			},
 		},
 		Action: func  (c *cli.Context) error {
 			trackID := c.Int("id")
+			codec, format, bitrate := mapQualityToFFmpegFlags(c.String("quality"))
 
 			token, err := os.ReadFile(".session")
 			if err != nil {
@@ -41,7 +66,7 @@ func PlayCommand() *cli.Command {
 				return fmt.Errorf("stream error: %v", err)
 			}
 			defer resp.Body.Close()
-			
+
 			// Parse the reponse JSON body to get the song URL
 			var streamData models.StreamResponse
 			if err := json.NewDecoder(resp.Body).Decode(&streamData); err != nil {
@@ -51,15 +76,45 @@ func PlayCommand() *cli.Command {
 			if streamData.URL == "" {
 				return fmt.Errorf("stream URL is empty")
 			}
-			
-			// Pipe the audio directly to mpv
-			cmd := exec.Command("mpv", "--no-terminal", "--quiet", streamData.URL)
-			
-			cmd.Stderr = os.Stderr
-			cmd.Stdout = os.Stdout
-			return cmd.Run()
 
-			
+			args := []string{
+				"-i", streamData.URL,
+			}
+
+			if codec != "" {
+				args = append(args, "-c:a", codec)
+			}
+			if bitrate != "" {
+				args = append(args, "-b:a", bitrate)
+			}
+
+			args = append(args, "-f", format, "pipe:1")
+
+			ffmpeg := exec.Command("ffmpeg", args...)
+
+			mpv := exec.Command("mpv", "-")
+
+			r, w := io.Pipe()
+			ffmpeg.Stdout = w
+			mpv.Stdin = r
+
+			ffmpeg.Stderr = os.Stderr
+			mpv.Stdout = os.Stdout
+			mpv.Stderr = os.Stderr
+
+			if err := ffmpeg.Start(); err != nil {
+				return fmt.Errorf("failed to start ffmpeg: %v", err)
+			}
+
+			if err := mpv.Start(); err != nil {
+				return fmt.Errorf("failed to start mpv: %v", err)
+			}
+
+			ffmpeg.Wait()
+			w.Close()
+			mpv.Wait()
+
+			return nil
 		},
 	}
 }
