@@ -15,6 +15,7 @@ func main() {
 		Commands: []*cli.Command {
 			cmd.LoginCommand(),
 			cmd.SearchCommand(),
+			cmd.PlayCommand(),
 		},
 	}
 
