@@ -16,6 +16,7 @@ func main() {
 			cmd.LoginCommand(),
 			cmd.SearchCommand(),
 			cmd.PlayCommand(),
+			cmd.DownloadCommand(),
 		},
 	}
 

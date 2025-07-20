@@ -8,11 +8,9 @@ import (
 	"os/exec"
 
 	"github.com/urfave/cli/v2"
+	
+	"github.com/adityadeshmukh1/dab-cli/internal/models"
 )
-
-type StreamResponse struct {
-	URL string `json:"url"`
-}
 
 func PlayCommand() *cli.Command {
 	return &cli.Command {
@@ -45,7 +43,7 @@ func PlayCommand() *cli.Command {
 			defer resp.Body.Close()
 			
 			// Parse the reponse JSON body to get the song URL
-			var streamData StreamResponse
+			var streamData models.StreamResponse
 			if err := json.NewDecoder(resp.Body).Decode(&streamData); err != nil {
 				return fmt.Errorf("failed to parse stream JSON: %v", err)
 			}
