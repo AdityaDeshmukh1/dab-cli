@@ -1,3 +1,5 @@
+.dabcli_last_search.json
 .session
 *.sum
+*.mp3
 dab-cli
