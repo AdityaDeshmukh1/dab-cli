@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/urfave/cli/v2"
+	"github.com/adityadeshmukh1/dab-cli/internal/store"
 )
 
 type SearchResponse struct {
@@ -21,7 +22,6 @@ type Track struct {
 }
 
 // Load that session cookie!
-
 func getSessionToken() (string, error) {
 	data, err := os.ReadFile(".session")
 	if err != nil {
@@ -75,9 +75,15 @@ func SearchCommand() *cli.Command {
 				return nil
 			}
 
+			store.ResetSongs()
 			fmt.Println("Search Results:")
 			for i, t := range searchRes.Tracks {
 				fmt.Printf("%2d. %s - %s (ID: %d)\n", i+1, t.Title, t.Artist, t.ID)
+				store.SetSong(i + 1, t.ID)
+			}
+			// Save the map so other commands can access it
+			if err := store.SaveToFile(".dabcli_last_search.json"); err != nil {
+				fmt.Printf("Warning: could not save search results: %v\n", err)
 			}
 
 			return nil
