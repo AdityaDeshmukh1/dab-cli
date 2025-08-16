@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"net/http"
+	"io"
+	"github.com/adityadeshmukh1/dab-cli/internal/models"
 )
 
 var SongIDMap = make(map[int]int)
@@ -47,4 +50,42 @@ func LoadFromFile(filename string) error {
 	}
 	return nil
 }
+
+// Fetch stream URL from API (shared with play.go logic)
+func FetchStreamURL(trackID int) (string, error) {
+	token, err := os.ReadFile(".session")
+	if err != nil {
+		return "", fmt.Errorf("failed to read session: %v", err)
+	}
+
+	streamURL := fmt.Sprintf("https://dab.yeet.su/api/stream?trackId=%d", trackID)
+	req, err := http.NewRequest("GET", streamURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+	req.AddCookie(&http.Cookie{Name: "session", Value: string(token)})
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("stream request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("stream request failed: %s", string(body))
+	}
+
+	var streamData models.StreamResponse
+	if err := json.NewDecoder(resp.Body).Decode(&streamData); err != nil {
+		return "", fmt.Errorf("failed to parse stream JSON: %v", err)
+	}
+
+	if streamData.URL == "" {
+		return "", fmt.Errorf("stream URL is empty")
+	}
+
+	return streamData.URL, nil
+}
+
 

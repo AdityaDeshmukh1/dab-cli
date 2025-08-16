@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 
 	"github.com/urfave/cli/v2"
-	"github.com/adityadeshmukh1/dab-cli/internal/models"
 	"github.com/adityadeshmukh1/dab-cli/internal/store"
 )
 
@@ -28,44 +25,6 @@ func mapQualityToFFmpegFlags(q string) (codec, format, bitrate string) {
 		return "libmp3lame", "mp3", "192k"
 	}
 }
-
-// Fetch stream URL from API
-func fetchStreamURL(trackID int) (string, error) {
-	token, err := os.ReadFile(".session")
-	if err != nil {
-		return "", fmt.Errorf("failed to read session: %v", err)
-	}
-
-	streamURL := fmt.Sprintf("https://dab.yeet.su/api/stream?trackId=%d", trackID)
-	req, err := http.NewRequest("GET", streamURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %v", err)
-	}
-	req.AddCookie(&http.Cookie{Name: "session", Value: string(token)})
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("stream request failed: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("stream request failed: %s", string(body))
-	}
-
-	var streamData models.StreamResponse
-	if err := json.NewDecoder(resp.Body).Decode(&streamData); err != nil {
-		return "", fmt.Errorf("failed to parse stream JSON: %v", err)
-	}
-
-	if streamData.URL == "" {
-		return "", fmt.Errorf("stream URL is empty")
-	}
-
-	return streamData.URL, nil
-}
-
 // Play stream via FFmpeg → MPV
 func playStream(url, codec, format, bitrate string) error {
 	args := []string{"-i", url}
@@ -126,7 +85,7 @@ func PlayCommand() *cli.Command {
 
 			codec, format, bitrate := mapQualityToFFmpegFlags(c.String("quality"))
 
-			url, err := fetchStreamURL(trackID)
+			url, err := store.FetchStreamURL(trackID)
 			if err != nil {
 				return err
 			}
