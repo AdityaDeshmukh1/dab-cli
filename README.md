@@ -9,3 +9,11 @@ The API can be found here: https://sixnine-dotdev.github.io/dab-api-docs/
 - Download songs via ffmpeg
 - Login and token-based access
 
+## Dependencies
+- FFMPEG
+- MPV
+
+## TODO
+- Add lyrics in CLI
+- Playlist/Song Queue
+- Interactive TUI
