@@ -1,21 +1,30 @@
-package cmd 
+package cmd
 
 import (
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/adityadeshmukh1/dab-cli/internal/login"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type model struct {
-	choices []string
-	cursor int
+	choices  []string
+	cursor   int
 	selected map[int]struct{}
+
+	// TUI login state
+	email     string
+	password  string
+	loggedIn  bool
+	errMsg    string
+	loginStep int // 0 = not started, 1 = email, 2 = password
 }
 
 func initialModel() model {
-	return model {
-		choices: []string{"Search Songs", "Play a song", "Download a song", "Login", "Quit"},
+	return model{
+		choices:  []string{"Search Songs", "Play a song", "Download a song", "Login", "Quit"},
 		selected: make(map[int]struct{}),
 	}
 }
@@ -24,69 +33,114 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
-// Messages
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
+
+		// Quit
 		switch msg.String() {
-
-
 		case "ctrl+c", "q":
 			return m, tea.Quit
+		}
 
+		// Login input mode
+		if m.loginStep > 0 {
+			switch msg.Type {
+			case tea.KeyRunes:
+				if m.loginStep == 1 {
+					m.email += string(msg.Runes)
+				} else if m.loginStep == 2 {
+					m.password += string(msg.Runes)
+				}
+			case tea.KeyBackspace:
+				if m.loginStep == 1 && len(m.email) > 0 {
+					m.email = m.email[:len(m.email)-1]
+				} else if m.loginStep == 2 && len(m.password) > 0 {
+					m.password = m.password[:len(m.password)-1]
+				}
+			case tea.KeyEnter:
+				if m.loginStep == 1 {
+					m.loginStep = 2 // move to password input
+				} else if m.loginStep == 2 {
+					err := login.Login(m.email, m.password)
+					if err != nil {
+						m.errMsg = err.Error()
+						m.loggedIn = false
+					} else {
+						m.loggedIn = true
+						m.errMsg = ""
+					}
+					m.loginStep = 0
+					m.email = ""
+					m.password = ""
+				}
+			}
+			return m, nil
+		}
+
+		// Menu navigation
+		switch msg.String() {
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
 			}
-
-			case"down", "j":
-			if m.cursor < len(m.choices) - 1 {
+		case "down", "j":
+			if m.cursor < len(m.choices)-1 {
 				m.cursor++
 			}
-
 		case "enter":
 			choice := m.choices[m.cursor]
-			fmt.Println("You chose: ", choice)
-
 			switch choice {
 			case "Search Songs":
-				// call search.go here
+				// TODO: call search.go here
 			case "Play a song":
-				// call play.go here
-
+				// TODO: call play.go here
 			case "Download a song":
-				// call download.go here
-
-			case "Login ":
-				// call login.go here
-
+				// TODO: call download.go here
+			case "Login":
+				m.loginStep = 1
+				return m, nil
 			case "Quit":
 				return m, tea.Quit
 			}
-
 		}
-
 	}
+
 	return m, nil
 }
 
 func (m model) View() string {
-	s := "What do you want to do?\n\n"
+	// Login view
+	if m.loginStep > 0 {
+		s := "Login to DAB\n\n"
+		if m.loginStep >= 1 {
+			s += fmt.Sprintf("Email: %s\n", m.email)
+		}
+		if m.loginStep == 2 {
+			s += fmt.Sprintf("Password: %s\n", strings.Repeat("*", len(m.password)))
+		}
+		if m.errMsg != "" {
+			s += "\n❌ ERROR: " + m.errMsg + "\n"
+		}
+		s += "\nPress Enter to continue, Backspace to delete."
+		return s
+	}
 
-	for i ,choice := range m.choices {
+	// Default menu view
+	s := "What do you want to do?\n\n"
+	for i, choice := range m.choices {
 		cursor := " "
 		if m.cursor == i {
 			cursor = ">"
 		}
-
 		s += fmt.Sprintf("%s %s\n", cursor, choice)
 	}
-
 	s += "\nPress q to quit.\n"
 	return s
 }
 
+// RunTUI starts the Bubble Tea program
 func RunTUI() {
 	p := tea.NewProgram(initialModel())
 	if err := p.Start(); err != nil {
