@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/adityadeshmukh1/dab-cli/internal/login"
+	"github.com/adityadeshmukh1/dab-cli/internal/search"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -20,6 +21,12 @@ type model struct {
 	loggedIn  bool
 	errMsg    string
 	loginStep int // 0 = not started, 1 = email, 2 = password
+
+	// Search Song State
+	searchStep   int // 0 = not started, 1 = entering query, displaying results
+	searchQuery  string
+	searchResult []search.Track
+	searchErr    string
 }
 
 func initialModel() model {
@@ -44,7 +51,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		// Login input mode
+		// Login Handler
 		if m.loginStep > 0 {
 			switch msg.Type {
 			case tea.KeyRunes:
@@ -79,6 +86,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Search Handler
+		if m.searchStep > 0 {
+			switch msg.Type {
+			case tea.KeyRunes:
+				m.searchQuery += string(msg.Runes)
+			case tea.KeyBackspace:
+				if len(m.searchQuery) > 0 {
+					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+				}
+
+			case tea.KeyEnter:
+				tracks, err := search.Search(m.searchQuery)
+				if err != nil {
+					m.searchErr = err.Error()
+					m.searchResult = nil
+				} else {
+					m.searchResult = tracks
+					m.searchErr = ""
+				}
+				m.searchStep = 2
+			}
+			return m, nil
+		}
+
 		// Menu navigation
 		switch msg.String() {
 		case "up", "k":
@@ -93,7 +124,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			choice := m.choices[m.cursor]
 			switch choice {
 			case "Search Songs":
-				// TODO: call search.go here
+				m.searchStep = 1
+				m.searchQuery = ""
+				m.searchResult = nil
+				return m, nil
 			case "Play a song":
 				// TODO: call play.go here
 			case "Download a song":
@@ -121,9 +155,33 @@ func (m model) View() string {
 			s += fmt.Sprintf("Password: %s\n", strings.Repeat("*", len(m.password)))
 		}
 		if m.errMsg != "" {
-			s += "\n❌ ERROR: " + m.errMsg + "\n"
+			s += "\n [ERROR] " + m.errMsg + "\n"
 		}
 		s += "\nPress Enter to continue, Backspace to delete."
+		return s
+	}
+
+	// Search Query Input
+	if m.searchStep == 1 {
+		s := "Search for a track:\n\n"
+		s += m.searchQuery
+		s += "\n\nPress Enter to search, Backspace to delete."
+		return s
+	}
+
+	// Search Results View
+	if m.searchStep == 2 {
+		s := "Search Results:\n\n"
+		if m.searchErr != "" {
+			s += fmt.Sprintf("[ERROR] %s\n", m.searchErr)
+		} else if len(m.searchResult) == 0 {
+			s += "No tracks found.\n"
+		} else {
+			for i, t := range m.searchResult {
+				s += fmt.Sprintf("52d. %s - %s (ID: %d)\n", i+1, t.Title, t.Artist, t.ID)
+			}
+		}
+		s += "\nPress any key to return to menu."
 		return s
 	}
 
