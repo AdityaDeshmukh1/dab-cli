@@ -52,7 +52,7 @@ func Download(trackNumber int) bool {
 
 	trackID, ok := store.GetSongID(trackNumber)
 	if !ok {
-		fmt.Errorf("track number %d not found in last search", trackNumber)
+		fmt.Printf("track number %d not found in last search", trackNumber)
 		return false
 	}
 

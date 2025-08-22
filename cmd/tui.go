@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/adityadeshmukh1/dab-cli/internal/download"
 	"github.com/adityadeshmukh1/dab-cli/internal/login"
+	"github.com/adityadeshmukh1/dab-cli/internal/play"
 	"github.com/adityadeshmukh1/dab-cli/internal/search"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -30,9 +32,15 @@ type model struct {
 	searchErr    string
 
 	// Download state
-	downloadStep    int // 0=idle, 1=enter track number, 2=show result
+	downloadStep    int
 	downloadInput   string
 	downloadMessage string
+
+	// Play Song State
+	playStep    int
+	playInput   string // accumulate digits as string
+	playErr     string
+	playQuality string
 }
 
 func initialModel() model {
@@ -74,7 +82,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case tea.KeyEnter:
 				if m.loginStep == 1 {
-					m.loginStep = 2 // move to password input
+					m.loginStep = 2
 				} else if m.loginStep == 2 {
 					err := login.Login(m.email, m.password)
 					if err != nil {
@@ -101,7 +109,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(m.searchQuery) > 0 {
 					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
 				}
-
 			case tea.KeyEnter:
 				if m.searchStep == 1 {
 					tracks, err := search.Search(m.searchQuery)
@@ -124,8 +131,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Download Handler
-		switch m.downloadStep {
-		case 1: // entering track number
+		if m.downloadStep > 0 {
 			switch msg.Type {
 			case tea.KeyRunes:
 				m.downloadInput += string(msg.Runes)
@@ -134,27 +140,46 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.downloadInput = m.downloadInput[:len(m.downloadInput)-1]
 				}
 			case tea.KeyEnter:
-				// parse input
-				var trackNum int
-				_, err := fmt.Sscanf(m.downloadInput, "%d", &trackNum)
-				if err != nil {
+				trackNum, err := strconv.Atoi(m.downloadInput)
+				if err != nil || trackNum <= 0 {
 					m.downloadMessage = "Invalid number!"
+				} else if download.Download(trackNum) {
+					m.downloadMessage = fmt.Sprintf("Track %d downloaded successfully!", trackNum)
 				} else {
-					success := download.Download(trackNum)
-					if success {
-						m.downloadMessage = fmt.Sprintf("Track %d downloaded successfully!", trackNum)
-					} else {
-						m.downloadMessage = fmt.Sprintf("Failed to download track %d.", trackNum)
-					}
+					m.downloadMessage = fmt.Sprintf("Failed to download track %d.", trackNum)
 				}
 				m.downloadStep = 2
+			default:
+				// ignore other keys
 			}
 			return m, nil
-		case 2: // showing result
-			// any key press returns to menu
-			m.downloadStep = 0
-			m.downloadInput = ""
-			m.downloadMessage = ""
+		}
+
+		// Play Handler
+		if m.playStep > 0 {
+			switch msg.String() {
+			case "enter":
+				trackNum, err := strconv.Atoi(m.playInput)
+				if err != nil || trackNum <= 0 {
+					m.playErr = "Invalid track number"
+				} else {
+					m.playErr = ""
+					err := play.Play(trackNum, "medium") // default quality
+					if err != nil {
+						m.playErr = err.Error()
+					}
+				}
+				m.playStep = 0
+				m.playInput = ""
+			case "backspace", "backspace2":
+				if len(m.playInput) > 0 {
+					m.playInput = m.playInput[:len(m.playInput)-1]
+				}
+			default:
+				if len(msg.Runes) > 0 && msg.Runes[0] >= '0' && msg.Runes[0] <= '9' {
+					m.playInput += string(msg.Runes)
+				}
+			}
 			return m, nil
 		}
 
@@ -169,23 +194,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		case "enter":
-			choice := m.choices[m.cursor]
-			switch choice {
+			switch m.choices[m.cursor] {
 			case "Search Songs":
 				m.searchStep = 1
 				m.searchQuery = ""
 				m.searchResult = nil
-				return m, nil
 			case "Play a song":
-				// TODO: call play.go here
+				m.playStep = 1
+				m.playInput = ""
+				m.playErr = ""
 			case "Download a song":
 				m.downloadStep = 1
 				m.downloadInput = ""
 				m.downloadMessage = ""
-				return m, nil
 			case "Login":
 				m.loginStep = 1
-				return m, nil
 			case "Quit":
 				return m, tea.Quit
 			}
@@ -199,28 +222,24 @@ func (m model) View() string {
 	// Login view
 	if m.loginStep > 0 {
 		s := "Login to DAB\n\n"
-		if m.loginStep >= 1 {
-			s += fmt.Sprintf("Email: %s\n", m.email)
-		}
+		s += fmt.Sprintf("Email: %s\n", m.email)
 		if m.loginStep == 2 {
 			s += fmt.Sprintf("Password: %s\n", strings.Repeat("*", len(m.password)))
 		}
 		if m.errMsg != "" {
-			s += "\n [ERROR] " + m.errMsg + "\n"
+			s += fmt.Sprintf("\n[ERROR] %s\n", m.errMsg)
 		}
 		s += "\nPress Enter to continue, Backspace to delete."
 		return s
 	}
 
-	// Search Query Input
+	// Search
 	if m.searchStep == 1 {
 		s := "Search for a track:\n\n"
 		s += m.searchQuery
 		s += "\n\nPress Enter to search, Backspace to delete."
 		return s
 	}
-
-	// Search Results View
 	if m.searchStep == 2 {
 		s := "Search Results:\n\n"
 		if m.searchErr != "" {
@@ -236,11 +255,11 @@ func (m model) View() string {
 		return s
 	}
 
-	// Download view
+	// Download
 	if m.downloadStep == 1 {
 		s := "Enter track number to download:\n\n"
 		s += m.downloadInput
-		s += "\n\nPress Enter to start download, Backspace to delete."
+		s += "\n\nPress Enter to download, Backspace to delete."
 		return s
 	}
 	if m.downloadStep == 2 {
@@ -248,7 +267,18 @@ func (m model) View() string {
 		return s
 	}
 
-	// Default menu view
+	// Play
+	if m.playStep == 1 {
+		s := "Enter track number to play:\n\n"
+		s += m.playInput
+		if m.playErr != "" {
+			s += fmt.Sprintf("\n[ERROR] %s", m.playErr)
+		}
+		s += "\n\nPress Enter to play, Backspace to delete."
+		return s
+	}
+
+	// Main Menu
 	s := "What do you want to do?\n\n"
 	for i, choice := range m.choices {
 		cursor := " "
@@ -261,7 +291,6 @@ func (m model) View() string {
 	return s
 }
 
-// RunTUI starts the Bubble Tea program
 func RunTUI() {
 	p := tea.NewProgram(initialModel())
 	if err := p.Start(); err != nil {
