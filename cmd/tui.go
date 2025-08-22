@@ -97,15 +97,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 			case tea.KeyEnter:
-				tracks, err := search.Search(m.searchQuery)
-				if err != nil {
-					m.searchErr = err.Error()
+				if m.searchStep == 1 {
+					tracks, err := search.Search(m.searchQuery)
+					if err != nil {
+						m.searchErr = err.Error()
+						m.searchResult = nil
+					} else {
+						m.searchResult = tracks
+						m.searchErr = ""
+					}
+					m.searchStep = 2
+				} else if m.searchStep == 2 {
+					m.searchStep = 0
+					m.searchQuery = ""
 					m.searchResult = nil
-				} else {
-					m.searchResult = tracks
 					m.searchErr = ""
 				}
-				m.searchStep = 2
 			}
 			return m, nil
 		}
@@ -178,7 +185,7 @@ func (m model) View() string {
 			s += "No tracks found.\n"
 		} else {
 			for i, t := range m.searchResult {
-				s += fmt.Sprintf("52d. %s - %s (ID: %d)\n", i+1, t.Title, t.Artist, t.ID)
+				s += fmt.Sprintf("%2d. %s - %s (ID: %d)\n", i+1, t.Title, t.Artist, t.ID)
 			}
 		}
 		s += "\nPress any key to return to menu."
