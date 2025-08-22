@@ -12,15 +12,15 @@ import (
 )
 
 type LoginPayload struct {
-	Email 		string `json:"email"`
-	Password 	string `json:"password"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 func LoginCommand() *cli.Command {
-	return &cli.Command {
-		Name: 	"login",
-		Usage: 	"Login to your DAB account",
-		Flags: 	[]cli.Flag{
+	return &cli.Command{
+		Name:  "login",
+		Usage: "Login to your DAB account",
+		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "email", Aliases: []string{"e"}, Required: true},
 			&cli.StringFlag{Name: "password", Aliases: []string{"p"}, Required: true},
 		},
@@ -69,7 +69,7 @@ func LoginCommand() *cli.Command {
 				}
 			}
 
-			return fmt.Errorf("no session cookie found!")
+			return fmt.Errorf("no session cookie found")
 		},
 	}
 }

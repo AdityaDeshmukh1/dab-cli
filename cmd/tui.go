@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/adityadeshmukh1/dab-cli/internal/download"
 	"github.com/adityadeshmukh1/dab-cli/internal/login"
 	"github.com/adityadeshmukh1/dab-cli/internal/search"
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,6 +28,11 @@ type model struct {
 	searchQuery  string
 	searchResult []search.Track
 	searchErr    string
+
+	// Download state
+	downloadStep    int // 0=idle, 1=enter track number, 2=show result
+	downloadInput   string
+	downloadMessage string
 }
 
 func initialModel() model {
@@ -117,6 +123,41 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Download Handler
+		switch m.downloadStep {
+		case 1: // entering track number
+			switch msg.Type {
+			case tea.KeyRunes:
+				m.downloadInput += string(msg.Runes)
+			case tea.KeyBackspace:
+				if len(m.downloadInput) > 0 {
+					m.downloadInput = m.downloadInput[:len(m.downloadInput)-1]
+				}
+			case tea.KeyEnter:
+				// parse input
+				var trackNum int
+				_, err := fmt.Sscanf(m.downloadInput, "%d", &trackNum)
+				if err != nil {
+					m.downloadMessage = "Invalid number!"
+				} else {
+					success := download.Download(trackNum)
+					if success {
+						m.downloadMessage = fmt.Sprintf("Track %d downloaded successfully!", trackNum)
+					} else {
+						m.downloadMessage = fmt.Sprintf("Failed to download track %d.", trackNum)
+					}
+				}
+				m.downloadStep = 2
+			}
+			return m, nil
+		case 2: // showing result
+			// any key press returns to menu
+			m.downloadStep = 0
+			m.downloadInput = ""
+			m.downloadMessage = ""
+			return m, nil
+		}
+
 		// Menu navigation
 		switch msg.String() {
 		case "up", "k":
@@ -138,7 +179,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "Play a song":
 				// TODO: call play.go here
 			case "Download a song":
-				// TODO: call download.go here
+				m.downloadStep = 1
+				m.downloadInput = ""
+				m.downloadMessage = ""
+				return m, nil
 			case "Login":
 				m.loginStep = 1
 				return m, nil
@@ -189,6 +233,18 @@ func (m model) View() string {
 			}
 		}
 		s += "\nPress any key to return to menu."
+		return s
+	}
+
+	// Download view
+	if m.downloadStep == 1 {
+		s := "Enter track number to download:\n\n"
+		s += m.downloadInput
+		s += "\n\nPress Enter to start download, Backspace to delete."
+		return s
+	}
+	if m.downloadStep == 2 {
+		s := m.downloadMessage + "\n\nPress any key to return to menu."
 		return s
 	}
 
