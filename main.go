@@ -17,6 +17,14 @@ func main() {
 			cmd.SearchCommand(),
 			cmd.PlayCommand(),
 			cmd.DownloadCommand(),
+			 {
+			 	 Name: "tui",
+			 	 Usage: "Run the interactive TUI", 
+			 	 Action: func(c *cli.Context) error {
+			 	 	 cmd.RunTUI()
+			 	 	 return nil
+			 	 },
+			 },
 		},
 	}
 
