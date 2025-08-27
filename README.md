@@ -17,3 +17,7 @@ The API can be found here: https://sixnine-dotdev.github.io/dab-api-docs/
 - Add lyrics in CLI
 - Playlist/Song Queue
 - Interactive TUI
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
