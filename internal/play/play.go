@@ -25,9 +25,9 @@ func mapQualityToFFmpegFlags(q string) (codec, format, bitrate string) {
 	}
 }
 
-// Play stream via FFmpeg → MPV
+// Play stream via FFmpeg → MPV with minimal progress output
 func playStream(url, codec, format, bitrate string) error {
-	args := []string{"-i", url}
+	args := []string{"-hide_banner", "-loglevel", "error", "-i", url}
 
 	if codec != "" {
 		args = append(args, "-c:a", codec)
@@ -39,7 +39,7 @@ func playStream(url, codec, format, bitrate string) error {
 	args = append(args, "-f", format, "pipe:1")
 
 	ffmpeg := exec.Command("ffmpeg", args...)
-	mpv := exec.Command("mpv", "-")
+	mpv := exec.Command("mpv", "--term-playing-msg=${media-title} [${time-pos}/${duration}]", "-")
 
 	r, w := io.Pipe()
 	ffmpeg.Stdout = w
