@@ -14,28 +14,27 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-
 var (
 	titleStyle = lipgloss.NewStyle().
-	Bold(true).
-	Foreground(lipgloss.Color("#FFCC00")).
-	MarginBottom(1).
-	MarginLeft(2)
+			Bold(true).
+			Foreground(lipgloss.Color("#FFCC00")).
+			MarginTop(1).
+			MarginBottom(1).
+			MarginLeft(2)
 
 	itemStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("#FFFFFF")).
-	PaddingLeft(4)
+			Foreground(lipgloss.Color("#FFFFFF")).
+			PaddingLeft(4)
 
 	selectedItemStyle = lipgloss.NewStyle().
-	Bold(true).
-	Foreground(lipgloss.Color("#00FFAA")).
-	PaddingLeft(2)
+				Bold(true).
+				Foreground(lipgloss.Color("#00FFAA")).
+				PaddingLeft(2)
 
 	helpStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("#777777")).
-	MarginTop(1).
-	MarginLeft(2)
-
+			Foreground(lipgloss.Color("#777777")).
+			MarginTop(1).
+			MarginLeft(2)
 )
 
 type model struct {
@@ -146,12 +145,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.searchStep = 2
 				} else if m.searchStep == 2 {
-					m.searchStep = 0
-					m.searchQuery = ""
-					m.searchResult = nil
-					m.searchErr = ""
 				}
 			}
+
+			if m.searchStep == 2 {
+				switch msg.String() {
+				case "up", "k":
+					if m.cursor > 0 {
+						m.cursor--
+					}
+				case "down", "j":
+					if m.cursor < len(m.searchResult)-1 {
+						m.cursor++
+					}
+
+				}
+			}
+
 			return m, nil
 		}
 
@@ -273,7 +283,11 @@ func (m model) View() string {
 			s += "No tracks found.\n"
 		} else {
 			for i, t := range m.searchResult {
-				s += fmt.Sprintf("%2d. %s - %s (ID: %d)\n", i+1, t.Title, t.Artist, t.ID)
+				if m.cursor == i {
+					s += selectedItemStyle.Render(fmt.Sprintf(" > %2d. %s - %s", i+1, t.Title, t.Artist)) + "\n"
+				} else {
+					s += itemStyle.Render(fmt.Sprintf("%2d. %s - %s", i+1, t.Title, t.Artist)) + "\n"
+				}
 			}
 		}
 		s += "\nPress any key to return to menu."
@@ -305,19 +319,18 @@ func (m model) View() string {
 
 	// Main Menu
 	s := titleStyle.Render("What do you want to do?") + "\n\n"
-	
+
 	for i, choice := range m.choices {
 		if m.cursor == i {
 			s += selectedItemStyle.Render(fmt.Sprintf("> %s", choice)) + "\n"
 		} else {
-			s += itemStyle.Render(choice)	+ "\n"	
+			s += itemStyle.Render(choice) + "\n"
 		}
 
 	}
 	s += "\nPress q to quit.\n"
 	return s
 }
-
 
 func RunTUI() {
 	p := tea.NewProgram(initialModel())
