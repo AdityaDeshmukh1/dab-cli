@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/adityadeshmukh1/dab-cli/internal/download"
@@ -50,10 +49,14 @@ type model struct {
 	loginStep int // 0 = not started, 1 = email, 2 = password
 
 	// Search Song State
-	searchStep   int // 0 = not started, 1 = entering query, displaying results
+	searchStep   int // 0 = not started, 1 = entering query, 2 = displaying results
 	searchQuery  string
 	searchResult []search.Track
 	searchErr    string
+
+	// Search action submenu state
+	searchActionOpen   bool // whether submenu (Play/Download) is open
+	searchActionCursor int  // cursor for submenu (0=Play, 1=Download)
 
 	// Download state
 	downloadStep    int
@@ -62,7 +65,7 @@ type model struct {
 
 	// Play Song State
 	playStep    int
-	playInput   string // accumulate digits as string
+	playInput   string
 	playErr     string
 	playQuality string
 }
@@ -82,14 +85,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
-
 		// Quit
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		}
 
-		// Login Handler
+		// -------------------
+		// LOGIN HANDLER
+		// -------------------
 		if m.loginStep > 0 {
 			switch msg.Type {
 			case tea.KeyRunes:
@@ -124,13 +128,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Search Handler
+		// -------------------
+		// SEARCH HANDLER
+		// -------------------
 		if m.searchStep > 0 {
 			switch msg.Type {
 			case tea.KeyRunes:
-				m.searchQuery += string(msg.Runes)
+				if !m.searchActionOpen {
+					m.searchQuery += string(msg.Runes)
+				}
 			case tea.KeyBackspace:
-				if len(m.searchQuery) > 0 {
+				if !m.searchActionOpen && len(m.searchQuery) > 0 {
 					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
 				}
 			case tea.KeyEnter:
@@ -143,82 +151,68 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.searchResult = tracks
 						m.searchErr = ""
 					}
+					m.cursor = 0
 					m.searchStep = 2
-				} else if m.searchStep == 2 {
 				}
 			}
 
 			if m.searchStep == 2 {
-				switch msg.String() {
-				case "up", "k":
-					if m.cursor > 0 {
-						m.cursor--
+				if m.searchActionOpen {
+					// Submenu navigation
+					switch msg.String() {
+					case "up", "k":
+						if m.searchActionCursor > 0 {
+							m.searchActionCursor--
+						}
+					case "down", "j":
+						if m.searchActionCursor < 1 {
+							m.searchActionCursor++
+						}
+					case "enter":
+						selectedTrack := m.searchResult[m.cursor]
+						if m.searchActionCursor == 0 {
+							err := play.Play(m.cursor+1, "medium")
+							if err != nil {
+								m.playErr = err.Error()
+							}
+						} else if m.searchActionCursor == 1 {
+							if download.Download(m.cursor + 1) {
+								m.downloadMessage = fmt.Sprintf("Track %d (%s) downloaded successfully!", m.cursor+1, selectedTrack.Title)
+							} else {
+								m.downloadMessage = fmt.Sprintf("Failed to download track %d.", m.cursor+1)
+							}
+						}
+						m.searchActionOpen = false
+					case "esc":
+						m.searchActionOpen = false
 					}
-				case "down", "j":
-					if m.cursor < len(m.searchResult)-1 {
-						m.cursor++
-					}
-
-				}
-			}
-
-			return m, nil
-		}
-
-		// Download Handler
-		if m.downloadStep > 0 {
-			switch msg.Type {
-			case tea.KeyRunes:
-				m.downloadInput += string(msg.Runes)
-			case tea.KeyBackspace:
-				if len(m.downloadInput) > 0 {
-					m.downloadInput = m.downloadInput[:len(m.downloadInput)-1]
-				}
-			case tea.KeyEnter:
-				trackNum, err := strconv.Atoi(m.downloadInput)
-				if err != nil || trackNum <= 0 {
-					m.downloadMessage = "Invalid number!"
-				} else if download.Download(trackNum) {
-					m.downloadMessage = fmt.Sprintf("Track %d downloaded successfully!", trackNum)
 				} else {
-					m.downloadMessage = fmt.Sprintf("Failed to download track %d.", trackNum)
-				}
-				m.downloadStep = 2
-			default:
-				// ignore other keys
-			}
-			return m, nil
-		}
-
-		// Play Handler
-		if m.playStep > 0 {
-			switch msg.String() {
-			case "enter":
-				trackNum, err := strconv.Atoi(m.playInput)
-				if err != nil || trackNum <= 0 {
-					m.playErr = "Invalid track number"
-				} else {
-					m.playErr = ""
-					err := play.Play(trackNum, "medium") // default quality
-					if err != nil {
-						m.playErr = err.Error()
+					// Main search result navigation
+					switch msg.String() {
+					case "up", "k":
+						if m.cursor > 0 {
+							m.cursor--
+						}
+					case "down", "j":
+						if m.cursor < len(m.searchResult)-1 {
+							m.cursor++
+						}
+					case "enter":
+						m.searchActionOpen = true
+						m.searchActionCursor = 0
+					case "esc":
+						// back to menu
+						m.searchStep = 0
+						m.searchQuery = ""
+						m.searchResult = nil
 					}
 				}
-				m.playStep = 0
-				m.playInput = ""
-			case "backspace", "backspace2":
-				if len(m.playInput) > 0 {
-					m.playInput = m.playInput[:len(m.playInput)-1]
-				}
-			default:
-				if len(msg.Runes) > 0 && msg.Runes[0] >= '0' && msg.Runes[0] <= '9' {
-					m.playInput += string(msg.Runes)
-				}
 			}
 			return m, nil
 		}
-
-		// Menu navigation
+		// -------------------
+		// MAIN MENU
+		// -------------------
 		switch msg.String() {
 		case "up", "k":
 			if m.cursor > 0 {
@@ -254,7 +248,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	// Login view
+	// -------------------
+	// LOGIN VIEW
+	// -------------------
 	if m.loginStep > 0 {
 		s := "Login to DAB\n\n"
 		s += fmt.Sprintf("Email: %s\n", m.email)
@@ -268,7 +264,9 @@ func (m model) View() string {
 		return s
 	}
 
-	// Search
+	// -------------------
+	// SEARCH VIEW
+	// -------------------
 	if m.searchStep == 1 {
 		s := "Search for a track:\n\n"
 		s += m.searchQuery
@@ -284,49 +282,38 @@ func (m model) View() string {
 		} else {
 			for i, t := range m.searchResult {
 				if m.cursor == i {
-					s += selectedItemStyle.Render(fmt.Sprintf(" > %2d. %s - %s", i+1, t.Title, t.Artist)) + "\n"
+					s += selectedItemStyle.Render(fmt.Sprintf("> %2d. %s - %s", i+1, t.Title, t.Artist)) + "\n"
+					if m.searchActionOpen {
+						actions := []string{"Play", "Download"}
+						for j, act := range actions {
+							prefix := "   "
+							if m.searchActionCursor == j {
+								prefix = " > "
+								s += selectedItemStyle.Render(fmt.Sprintf("%s%s", prefix, act)) + "\n"
+							} else {
+								s += itemStyle.Render(fmt.Sprintf("%s%s", prefix, act)) + "\n"
+							}
+						}
+					}
 				} else {
 					s += itemStyle.Render(fmt.Sprintf("%2d. %s - %s", i+1, t.Title, t.Artist)) + "\n"
 				}
 			}
 		}
-		s += "\nPress any key to return to menu."
+		s += "\nUse up/down to navigate, Enter to select, Esc to go back."
 		return s
 	}
 
-	// Download
-	if m.downloadStep == 1 {
-		s := "Enter track number to download:\n\n"
-		s += m.downloadInput
-		s += "\n\nPress Enter to download, Backspace to delete."
-		return s
-	}
-	if m.downloadStep == 2 {
-		s := m.downloadMessage + "\n\nPress any key to return to menu."
-		return s
-	}
-
-	// Play
-	if m.playStep == 1 {
-		s := "Enter track number to play:\n\n"
-		s += m.playInput
-		if m.playErr != "" {
-			s += fmt.Sprintf("\n[ERROR] %s", m.playErr)
-		}
-		s += "\n\nPress Enter to play, Backspace to delete."
-		return s
-	}
-
-	// Main Menu
+	// -------------------
+	// MAIN MENU
+	// -------------------
 	s := titleStyle.Render("What do you want to do?") + "\n\n"
-
 	for i, choice := range m.choices {
 		if m.cursor == i {
 			s += selectedItemStyle.Render(fmt.Sprintf("> %s", choice)) + "\n"
 		} else {
 			s += itemStyle.Render(choice) + "\n"
 		}
-
 	}
 	s += "\nPress q to quit.\n"
 	return s
@@ -339,3 +326,4 @@ func RunTUI() {
 		os.Exit(1)
 	}
 }
+
