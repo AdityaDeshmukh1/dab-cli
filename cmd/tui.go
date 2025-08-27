@@ -9,6 +9,8 @@ import (
 	"github.com/adityadeshmukh1/dab-cli/internal/login"
 	"github.com/adityadeshmukh1/dab-cli/internal/play"
 	"github.com/adityadeshmukh1/dab-cli/internal/search"
+
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -53,6 +55,7 @@ type model struct {
 	searchQuery  string
 	searchResult []search.Track
 	searchErr    string
+	searching    bool // whether search is in progress
 
 	// Search action submenu state
 	searchActionOpen   bool // whether submenu (Play/Download) is open
@@ -68,21 +71,59 @@ type model struct {
 	playInput   string
 	playErr     string
 	playQuality string
+
+	spinner spinner.Model
 }
 
 func initialModel() model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	return model{
-		choices:  []string{"Search Songs", "Play a song", "Download a song", "Login", "Quit"},
+		choices:  []string{"Search Songs", "Login", "Quit"},
 		selected: make(map[int]struct{}),
+		spinner:  s,
+	}
+}
+
+type searchResultsMsg struct {
+	tracks []search.Track
+	err    error
+}
+
+func doSearch(query string) tea.Cmd {
+	return func() tea.Msg {
+		tracks, err := search.Search(query)
+		return searchResultsMsg{tracks: tracks, err: err}
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return m.spinner.Tick
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+
+	// Handle spinner tick messages
+	case spinner.TickMsg:
+		if m.searching {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
+	// Async search results
+	case searchResultsMsg:
+		m.searching = false
+		if msg.err != nil {
+			m.searchErr = msg.err.Error()
+			m.searchResult = nil
+		} else {
+			m.searchResult = msg.tracks
+		}
+		return m, nil
 
 	case tea.KeyMsg:
 		// Quit
@@ -134,29 +175,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.searchStep > 0 {
 			switch msg.Type {
 			case tea.KeyRunes:
-				if !m.searchActionOpen {
+				if !m.searchActionOpen && !m.searching {
 					m.searchQuery += string(msg.Runes)
 				}
 			case tea.KeyBackspace:
-				if !m.searchActionOpen && len(m.searchQuery) > 0 {
+				if !m.searchActionOpen && !m.searching && len(m.searchQuery) > 0 {
 					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
 				}
 			case tea.KeyEnter:
 				if m.searchStep == 1 {
-					tracks, err := search.Search(m.searchQuery)
-					if err != nil {
-						m.searchErr = err.Error()
-						m.searchResult = nil
-					} else {
-						m.searchResult = tracks
-						m.searchErr = ""
-					}
+					// start search
 					m.cursor = 0
+					m.searchResult = nil
+					m.searchErr = ""
 					m.searchStep = 2
+					m.searching = true
+
+					return m, tea.Batch(
+						m.spinner.Tick, // Use the spinner's built-in tick command
+						doSearch(m.searchQuery),
+					)
 				}
 			}
 
-			if m.searchStep == 2 {
+			if m.searchStep == 2 && !m.searching {
 				if m.searchActionOpen {
 					// Submenu navigation
 					switch msg.String() {
@@ -210,6 +252,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+
 		// -------------------
 		// MAIN MENU
 		// -------------------
@@ -228,6 +271,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searchStep = 1
 				m.searchQuery = ""
 				m.searchResult = nil
+				m.searching = false
 			case "Play a song":
 				m.playStep = 1
 				m.playInput = ""
@@ -275,7 +319,9 @@ func (m model) View() string {
 	}
 	if m.searchStep == 2 {
 		s := "Search Results:\n\n"
-		if m.searchErr != "" {
+		if m.searching {
+			s += fmt.Sprintf("Searching for %q %s\n", m.searchQuery, m.spinner.View())
+		} else if m.searchErr != "" {
 			s += fmt.Sprintf("[ERROR] %s\n", m.searchErr)
 		} else if len(m.searchResult) == 0 {
 			s += "No tracks found.\n"
