@@ -11,6 +11,31 @@ import (
 	"github.com/adityadeshmukh1/dab-cli/internal/play"
 	"github.com/adityadeshmukh1/dab-cli/internal/search"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+
+var (
+	titleStyle = lipgloss.NewStyle().
+	Bold(true).
+	Foreground(lipgloss.Color("#FFCC00")).
+	MarginBottom(1).
+	MarginLeft(2)
+
+	itemStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#FFFFFF")).
+	PaddingLeft(4)
+
+	selectedItemStyle = lipgloss.NewStyle().
+	Bold(true).
+	Foreground(lipgloss.Color("#00FFAA")).
+	PaddingLeft(2)
+
+	helpStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#777777")).
+	MarginTop(1).
+	MarginLeft(2)
+
 )
 
 type model struct {
@@ -279,17 +304,20 @@ func (m model) View() string {
 	}
 
 	// Main Menu
-	s := "What do you want to do?\n\n"
+	s := titleStyle.Render("What do you want to do?") + "\n\n"
+	
 	for i, choice := range m.choices {
-		cursor := " "
 		if m.cursor == i {
-			cursor = ">"
+			s += selectedItemStyle.Render(fmt.Sprintf("> %s", choice)) + "\n"
+		} else {
+			s += itemStyle.Render(choice)	+ "\n"	
 		}
-		s += fmt.Sprintf("%s %s\n", cursor, choice)
+
 	}
 	s += "\nPress q to quit.\n"
 	return s
 }
+
 
 func RunTUI() {
 	p := tea.NewProgram(initialModel())
