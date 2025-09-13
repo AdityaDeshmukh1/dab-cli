@@ -151,10 +151,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// -------------------
 		if m.searchStep > 0 {
 			switch msg.Type {
+
 			case tea.KeyRunes:
 				if !m.searchActionOpen && !m.searching {
-					m.searchQuery += string(msg.Runes)
+					for _, r := range msg.Runes {
+						m.searchQuery += string(r)
+					}
 				}
+			case tea.KeySpace:
+				if !m.searchActionOpen && !m.searching {
+					m.searchQuery += " "
+				}
+
 			case tea.KeyBackspace:
 				if !m.searchActionOpen && !m.searching && len(m.searchQuery) > 0 {
 					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/adityadeshmukh1/dab-cli/internal/store"
@@ -35,7 +36,8 @@ func Search(query string) ([]Track, error) {
 		return nil, err
 	}
 
-	url := "https://dab.yeet.su/api/search?q=" + query
+	encodedQuery := url.QueryEscape(query)
+	url := "https://dab.yeet.su/api/search?q=" + encodedQuery
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create search request: %v", err)
