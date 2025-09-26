@@ -3,10 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
+	"github.com/adityadeshmukh1/dab-cli/cmd/loginTUI"
 	"github.com/adityadeshmukh1/dab-cli/internal/download"
-	"github.com/adityadeshmukh1/dab-cli/internal/login"
 	"github.com/adityadeshmukh1/dab-cli/internal/play"
 	"github.com/adityadeshmukh1/dab-cli/internal/search"
 
@@ -20,12 +19,7 @@ type model struct {
 	cursor   int
 	selected map[int]struct{}
 
-	// TUI login state
-	email     string
-	password  string
-	loggedIn  bool
-	errMsg    string
-	loginStep int // 0 = not started, 1 = email, 2 = password
+	login loginTUI.Model
 
 	// Search Song State
 	searchStep   int // 0 = not started, 1 = entering query, 2 = displaying results
@@ -112,38 +106,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// -------------------
 		// LOGIN HANDLER
 		// -------------------
-		if m.loginStep > 0 {
-			switch msg.Type {
-			case tea.KeyRunes:
-				if m.loginStep == 1 {
-					m.email += string(msg.Runes)
-				} else if m.loginStep == 2 {
-					m.password += string(msg.Runes)
-				}
-			case tea.KeyBackspace:
-				if m.loginStep == 1 && len(m.email) > 0 {
-					m.email = m.email[:len(m.email)-1]
-				} else if m.loginStep == 2 && len(m.password) > 0 {
-					m.password = m.password[:len(m.password)-1]
-				}
-			case tea.KeyEnter:
-				if m.loginStep == 1 {
-					m.loginStep = 2
-				} else if m.loginStep == 2 {
-					err := login.Login(m.email, m.password)
-					if err != nil {
-						m.errMsg = err.Error()
-						m.loggedIn = false
-					} else {
-						m.loggedIn = true
-						m.errMsg = ""
-					}
-					m.loginStep = 0
-					m.email = ""
-					m.password = ""
-				}
-			}
-			return m, nil
+		if m.login.LoginStep > 0 {
+			var cmd tea.Cmd
+			m.login, cmd = m.login.Update(msg)
+			return m, cmd
 		}
 
 		// -------------------
@@ -266,7 +232,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.downloadInput = ""
 				m.downloadMessage = ""
 			case "Login":
-				m.loginStep = 1
+				m.login.LoginStep = 1
 			case "Quit":
 				return m, tea.Quit
 			}
@@ -280,17 +246,8 @@ func (m model) View() string {
 	// -------------------
 	// LOGIN VIEW
 	// -------------------
-	if m.loginStep > 0 {
-		s := "Login to DAB\n\n"
-		s += fmt.Sprintf("Email: %s\n", m.email)
-		if m.loginStep == 2 {
-			s += fmt.Sprintf("Password: %s\n", strings.Repeat("*", len(m.password)))
-		}
-		if m.errMsg != "" {
-			s += fmt.Sprintf("\n[ERROR] %s\n", m.errMsg)
-		}
-		s += "\nPress Enter to continue, Backspace to delete."
-		return s
+	if m.login.LoginStep > 0 {
+		return m.login.View()
 	}
 
 	// -------------------
