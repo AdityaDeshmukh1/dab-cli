@@ -1,13 +1,13 @@
-package cmd
+package ui
 
 import (
 	"fmt"
 	"os"
 
-	"github.com/adityadeshmukh1/dab-cli/cmd/downloadTUI"
-	"github.com/adityadeshmukh1/dab-cli/cmd/loginTUI"
-	"github.com/adityadeshmukh1/dab-cli/cmd/playTUI"
-	"github.com/adityadeshmukh1/dab-cli/cmd/searchTUI"
+	"github.com/adityadeshmukh1/dab-cli/ui/downloadTUI"
+	"github.com/adityadeshmukh1/dab-cli/ui/loginTUI"
+	"github.com/adityadeshmukh1/dab-cli/ui/playTUI"
+	"github.com/adityadeshmukh1/dab-cli/ui/searchScreen" // <-- updated
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,7 +21,7 @@ type model struct {
 
 	// Component models
 	login    loginTUI.Model
-	search   searchTUI.Model
+	search   searchScreen.Model // <-- updated
 	download downloadTUI.Model
 	play     playTUI.Model
 
@@ -41,10 +41,11 @@ func initialModel() model {
 		selected:    make(map[int]struct{}),
 		currentView: "menu",
 		login:       loginTUI.NewModel(),
-		search:      searchTUI.NewModel(),
-		download:    downloadTUI.NewModel(),
-		play:        playTUI.NewModel(),
-		spinner:     s,
+		// give search screen some width/height for layout
+		search:   searchScreen.New(80, 20),
+		download: downloadTUI.NewModel(),
+		play:     playTUI.NewModel(),
+		spinner:  s,
 	}
 }
 
